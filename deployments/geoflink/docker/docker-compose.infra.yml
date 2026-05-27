@@ -1,0 +1,156 @@
+# RUN INSTRUCTION:
+# docker-compose -f docker-compose.infra.yml up -d --build
+
+# Monitoring Dashboards
+# Flink Dashboard:  http://localhost:8082  (Cluster and job monitoring)
+# Kafka UI:         http://localhost:8090  (Topics, messages, and broker inspection)
+# API Docs:         http://localhost:8000/docs  (Swagger/OpenAPI documentation)
+
+
+name: geoflink-infra
+services:
+
+  #flink
+  jobmanager:
+      image: flink:1.9.1
+      depends_on:
+        broker:
+          condition: service_healthy
+      ports:
+        - "8082:8081" 
+      volumes:
+        - ./data:/data
+      command: jobmanager
+      environment:
+        - |
+          FLINK_PROPERTIES=
+          jobmanager.rpc.address: jobmanager        
+
+  taskmanager:
+    image: flink:1.9.1
+    depends_on:
+      - jobmanager
+    volumes:
+      - ./data:/data
+    command: taskmanager
+    scale: 3
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 2    
+
+  jar-uploader:
+    image: curlimages/curl:8.18.0
+    container_name: jar-uploader
+    depends_on:
+      - jobmanager
+    volumes:
+      - ./jars:/jars  
+    command: >
+      /bin/sh -c "
+        echo 'Waiting for Flink JobManager...';
+        while ! curl -s http://jobmanager:8081/overview > /dev/null; do sleep 3; done;
+        echo 'JobManager available. Sending jar files...';
+        for file in /jars/*.jar; do
+          if [ -f \"\$$file\" ]; then
+            curl -X POST -H \"Expect:\" -F \"jarfile=@\$$file\" http://jobmanager:8081/jars/upload;
+          fi
+        done;
+        echo 'All jar files sent';
+      "
+
+
+  #kafka side
+
+  # Kafka Broker with KRaft (no Zookeeper)
+  broker:
+    image: confluentinc/cp-kafka:7.7.7
+    container_name: kafka-broker
+    hostname: broker
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      # KRaft settings
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@broker:29093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+
+      # Fixed Listener Configuration
+      KAFKA_LISTENERS: "INTERNAL://broker:29092,CONTROLLER://broker:29093,EXTERNAL://0.0.0.0:9092"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://broker:29092,EXTERNAL://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+
+      # Internal topic settings
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      
+      # Other settings
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_JMX_PORT: "9101"
+      KAFKA_JMX_HOSTNAME: "localhost"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/broker/29092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka-ui:
+      image: provectuslabs/kafka-ui:v0.7.2
+      hostname: kafka-ui
+
+      ports:
+        - "8090:8080"
+      depends_on:
+        - broker
+      environment:
+        KAFKA_CLUSTERS_0_NAME: local
+        KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: broker:29092 
+
+
+  #api
+  geoflink-api:
+    build:
+      context: ../../..
+      dockerfile: deployments/geoflink/docker/api/Dockerfile.api
+    
+    container_name: geoflink_api
+    hostname: api
+    
+    depends_on:
+      broker:
+        condition: service_healthy
+      jobmanager:
+        condition: service_started
+      jar-uploader:  
+        condition: service_completed_successfully
+     
+    ports:
+      - "8000:8000"
+    
+    environment:
+      ACTIVE_ADAPTER: "geoflink"
+      FLINK_URL: "http://jobmanager:8081"
+      KAFKA_BROKER: "broker:29092"
+      FLINK_JAR_NAME: "GeoFlinkProject-0.1"
+      GEOFLINK_DB_NAME: "/data/geoflink_registry.db"
+    volumes:
+      - ../../../app:/code/app
+      - ./data:/data
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    
+    networks:
+      default:
+        aliases:
+          - geoflink-api
+
+networks:
+  default:
+    name: geoflink-network
+    driver: bridge

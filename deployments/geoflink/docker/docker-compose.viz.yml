@@ -1,0 +1,78 @@
+# Setup
+# docker-compose -f docker-compose.viz.yml up -d --build
+
+# NOTE: 
+# For the GUI to work (ROS2 robot path visualization), you must run this stack from a WSL 2 terminal.
+# Windows shells (PowerShell/CMD) do not populate the ${DISPLAY} variable required for X11 forwarding.
+
+name: geoflink-viz
+services:
+  rviz:
+    build: ./rviz  
+    network_mode: host
+    container_name: ros_rviz
+    environment:
+      - DISPLAY=${DISPLAY}
+      - XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}
+      - LIBGL_ALWAYS_SOFTWARE=1
+    env_file: .env
+    volumes:
+      - ./rviz/rviz_config:/root/.rviz2
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    command: rviz2 -d /root/.rviz2/parcelles_gps.rviz
+
+    healthcheck:
+      test: ["CMD", "bash", "-c", "pgrep rviz2 > /dev/null"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+
+  multi_kafka_bridge:
+    build: ./kafka_bridge
+    network_mode: host
+    container_name: ros_bridge
+    volumes:
+      - ./data:/app/data
+      - ./kafka_bridge/multi_robot_kafka_bridge.py:/app/multi_robot_kafka_bridge.py
+    env_file: .env
+    command: ["python3", "/app/multi_robot_kafka_bridge.py", "--ros-args", "-p", "robot_list:=['leader', 'follower']", "-p", "kafka_bootstrap_servers:=localhost:9092"]
+
+  visualizer:
+    build: ./visualizer
+    network_mode: host
+    container_name: ros_visualizer
+    depends_on:
+      rviz:
+        condition: service_healthy
+    volumes: 
+      - ./data:/app/data
+      - ./visualizer/multi_marker_painter.py:/app/multi_marker_painter.py
+    env_file: .env
+    command: ["python3", "/app/multi_marker_painter.py", "--ros-args", "-p", "robot_list:=['leader', 'follower']", "-p", "centroid_shape_name:='1 MONT'"]
+
+
+#Rosbag player should be run separately from the other containers
+#use either:
+
+  # docker exec -it ros_bridge bash
+  # source /opt/ros/jazzy/setup.bash
+  # ros2 bag play /app/data/plots/plots.db3 --rate 10 --topics /leader/gps/fix /follower/gps/fix
+
+#or
+
+# docker exec -it ros_bridge bash -c "source /opt/ros/jazzy/setup.bash && ros2 bag play /app/data/plots/plots.db3 --rate 10 --topics /leader/gps/fix /follower/gps/fix"
+
+#or
+
+# docker-compose -f docker-compose.viz.yml run rosbag_player
+
+
+  rosbag_player:
+    build: ./rosbag_player
+    network_mode: host
+    container_name: ros_player
+    volumes:
+      - ./data:/data
+    command: ["ros2", "bag", "play", "/data/plots/plots.db3", "-r", "10.0", "--topics", "/leader/gps/fix", "/follower/gps/fix"]
+    profiles:
+      - manual  
