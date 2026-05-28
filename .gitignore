@@ -27,3 +27,6 @@ api_env/
 #deployments/bags/
 
 **/otherscripts/
+**/others/
+**/test_results/
+**/geoflink_registry.db
