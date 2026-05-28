@@ -8,15 +8,7 @@ having to change the core logic of the benchmark scripts.
 
 # --- KAFKA CONFIGURATION ---
 
-KAFKA_BROKER = "localhost:9092"
-KAFKA_BROKER_CONTAINER = "ros2-robot-fleet-demo-broker-1"
-SENSOR_TOPIC = "sensor_proximity"
-
-# --- TIMING CONFIGURATION ---
-
-FLINK_STARTUP_WAIT = 5
-COLLECTOR_RUNTIME_SECONDS = 60
-
+KAFKA_BROKER = "broker:9092"
 KAFKA_POLL_TIMEOUT_MS = 500
 KAFKA_CONSUMER_TIMEOUT_MS = 1000
 
@@ -77,6 +69,7 @@ for i in SCENARIO_RULES.keys():
 
 # --- OTHER CONFIGURATION ---
 
+COLLECTOR_RUNTIME_SECONDS = 60
 ITERATIONS = 1
 START_ITERATION = 1
 OUTPUT_DIR = "test_results"

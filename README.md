@@ -1,104 +1,70 @@
-# GIS4IoRT processing layer
+# Quick start
 
-This repository contains the implementation of the data integration layer developed as part of an engineering thesis:  
-**"Architecture for Integrating Robotic Devices: Design, Implementation, Experimental Evaluation"**
+## Prerequisites
 
-> **University:** Poznan University of Technology  
-> **Faculty:** Faculty of Computing and Telecommunications  
-> **Field of Study:** Computer Science
+You will need Docker Engine with Compose v2, Python 3.11
 
----
-## Project Overview
+Setup python environment. In the terminal:
 
-This engineering thesis addresses the challenge of efficient telemetry collection, normalization, and real-time analysis for heterogeneous robotic fleets within the context of **Agriculture 4.0** and the **Internet of Robotic Things (IoRT)**.
+1. Navigate to the project root directory.
 
-The primary goal was to bridge the interoperability gap between low-level robotic frameworks (**ROS 2**) and high-level analytical tools.
+2. Create a python virtual environment: `python3.11 -m venv .venv`
 
-### Architectural Approach
-Rather than proposing a single monolithic solution, this repository implements and compares **three distinct, end-to-end architectures**:
-1.  **Apache Flink** (extended with GeoFlink)
-2.  **ksqlDB**
-3.  **NebulaStream**
+3. Enter the virtual environment: `source .venv/bin/activate`
 
-Each architecture operates as an independent pipeline with its own dedicated ingestion mechanisms (bridges) and processing logic. This comparative design allows for a comprehensive assessment of how different stream processing paradigms handle high-frequency robotic workloads.
+4. Download dependencies: `pip install -r requirements.txt`
 
-**Unified Access Layer**  
-Regardless of the underlying architecture used, the processed results are exposed via a **FastAPI** service. This RESTful interface acts as a consistent consumption point for external applications.
+## Running the system
+Setup the Apache Kafka + Apache Flink + rosbag player ecosystem. [Look at this section](#quick-start).
 
----
+Run Apache Kafka + Apache Flink + GIS API (with jar-uploader and UI's):
 
-## Implemented Spatial Use Cases
+1. Navigate to the docker directory: `cd deployments/geoflink/docker`
 
-To validate the performance of the proposed architectures, three distinct types of spatial queries were implemented, representing common challenges in autonomous operations:
+2. Run the docker compose script: `docker compose -f docker-compose.infra.yml up -d --build`
 
-1.  **Geofencing (Safety-Critical Monitoring)**
-    * **Logic:** A *Point-in-Polygon* operation that continuously monitors whether a robot remains within a pre-defined operational zone.
-    * **Behavior:** An alert is triggered immediately if the robot's coordinates deviate from the designated safe area.
+Run the rosbag player:
 
-2.  **Sensor Proximity (Stream-to-Static Join)**
-    * **Logic:** An event-driven query measuring the distance between a moving robot (stream) and static environmental sensors.
-    * **Behavior:** An alert is generated if a robot enters the proximity of a sensor reporting critical values (e.g., high soil humidity).
+1. Navigate to the docker directory: `cd deployments/geoflink/docker`
 
-3.  **Collision Detection (Stream-to-Stream Join)**
-    * **Logic:** A dynamic proximity query that calculates Euclidean distances between multiple moving agents in real-time.
-    * **Behavior:** Triggers an alert if the distance between any two robots falls below a safety threshold, requiring highly efficient windowing and state management strategies.
+2. Run the docker compose script: `docker compose -f docker-compose.viz.yml up -d --build multi_kafka_bridge`
 
----
-## Funding & Project Context
+# Benchmarks
 
-**This research is conducted as an integral part of the international GIS4IoRT project, supported by the National Science Centre (NCN), Poland, grant no. 2024/06/Y/ST6/00136, originally funded under the EU project Chist-Era call 2023, entitled Development of a Plug-and-Play Middleware for Integrating Robot Sensor Data with GIS Tools in a Cloud Environment.**
+## Prerequisites
+You will need Python 3.11.
 
+Configure tests:
+1. Find the `deployments/geoflink/benchmarks/config.py` file and define your test scenarios, including:
+ 
+   - task templates,
+   - number of robots and robot ids, 
+   - zones,
+   - collection time,
+   - number of iterations.
 
-## Project Structure
+Setup python environment. In the terminal:
 
-The repository follows a clean separation of concerns, distinguishing between the unified access layer (API) and the specific stream processing implementations.
+1. Navigate to the benchmarks directory: `cd deployments/geoflink/benchmarks`
 
-### `app/` (Unified Access Layer)
-Contains the **FastAPI** application that serves as the single entry point for external systems.
-* **Core Logic:** The main application factory and shared utilities.
-* **Adapters (`app/adapters/{tech}/routers`):** Contains technology-specific endpoint definitions. Each architecture (GeoFlink, ksqlDB, NebulaStream) has its own router module here that connects the API to the underlying data streams.
+2. Create a python virtual environment: `python3.11 -m venv .venv`
 
-### `deployments/` (Processing and Infrastructure)
-Contains the core implementation of the stream processing architectures, custom operators, and deployment configurations.
-* **Structure:** `deployments/{technology}/`
-* **Contents per folder:**
-    * **Docker Compose Stacks:** Complete environment definitions for running the specific architecture.
-    * **Source Code:** Implementation of custom operators (e.g., Flink Jobs in Java).
-    * **Benchmark Scripts:** Tools for logging each engine's results.
+3. Enter the virtual environment: `source .venv/bin/activate`
 
----
+4. Download dependencies: `pip install -r requirements.txt`
 
-## Implemented Architectures 
+## Running the tests
+Start the Apache Kafka + Apache Flink + rosbag player ecosystem. [Look at this section](#quick-start).
 
-The project implements and compares three distinct stream processing paradigms. Each module is self-contained with its own deployment logic.
+Register zones, robots, configs and rules. In the terminal:
 
-### Apache Flink Architecture (GeoFlink)
-* **Description:** A Java-based pipeline utilizing the **GeoFlink** extension for advanced spatial stream processing.
-* **Focus:** High-throughput spatial joins and complex event processing.
-* **Author:** Filip Baranowski
-* **Documentation & Source:** [Go to GeoFlink Module](./deployments/geoflink/README.md)
+1. Navigate to the benchmarks directory: `cd deployments/geoflink/benchmarks`
 
-### ksqlDB Architecture
-* **Description:** A declarative, SQL-centric pipeline built directly on top of the Kafka ecosystem.
-* **Focus:** Rapid development and ease of integration for standard filtering and aggregation tasks.
-* **Author:** Antoni Sopata
-* **Documentation & Source:** [Go to ksqlDB Module](./deployments/ksqldb/README.md)
+2. Enter the virtual environment: `source .venv/bin/activate`
 
-### NebulaStream Architecture
-* **Description:** An experimental pipeline using **NebulaStream**, a C++ based engine designed specifically for IoT environments.
-* **Focus:** Low-latency processing and edge-cloud continuum capabilities.
-* **Author:** Jakub Pilarski
-* **Documentation & Source:** [Go to NebulaStream Module](./deployments/nebulastream/README.md)
+3. Run script: `python3 setup_geoflink.py`
 
+4. Run script: `python3 run_tests.py`
 
-## Credits
-
-This project was built using open-source technologies. We would like to explicitly acknowledge the following libraries:
-
-**GeoFlink (SpatialFlink)**: The spatial stream processing engine used in the GeoFlink implementation is based on the [SpatialFlink](https://github.com/aistairc/SpatialFlink) library developed by **AIST Artificial Intelligence Research Center**.
-* *Modifications:* The library source code is included in the `GIS4IoRT-processing-layer\deployments\geoflink\geoflink\src\main\java\GeoFlink` package to support custom extensions.
-* *License:* Apache License 2.0. See `GIS4IoRT-processing-layer\deployments\geoflink\geoflink\LICENSE-SpatialFlink` for detailed attribution and license information.
-
-**ksqlDB**: The event streaming database used for the SQL-based implementation is based on [ksqlDB](https://ksqldb.io/) developed by **Confluent**.
-
-**NebulaStream**: The distributed data management engine used for the NebulaStream-based implementation is derived from the [NebulaStream](https://nebula.stream/) project developed within the BIFOLD research initiative.
+### NOTE: Running benchmarks with the [ros2-robot-fleet-demo](https://github.com/LRMPUT/ros2-robot-fleet-demo) project
+Instead of starting the ecosystem according to [this section](#quick-start), simply follow the instructions stated in the geoflink README.md file of the project found on the geoflink branch. Then proceed with the tests as usual.
