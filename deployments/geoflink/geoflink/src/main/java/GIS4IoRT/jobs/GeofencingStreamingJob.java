@@ -10,6 +10,9 @@ import GIS4IoRT.utils.deserialization.JsonToPointMapper;
 import GeoFlink.spatialIndices.UniformGrid;
 import GeoFlink.spatialObjects.Point;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.common.typeinfo.TypeHint;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
@@ -24,10 +27,13 @@ import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer;
+import org.apache.flink.streaming.connectors.kafka.KafkaDeserializationSchema;
 import org.apache.flink.streaming.connectors.kafka.internals.KeyedSerializationSchemaWrapper;
 import org.apache.flink.util.Collector;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.io.Serializable;
+import java.util.Locale;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
@@ -101,8 +107,25 @@ public class GeofencingStreamingJob implements Serializable {
         ).name("Control-Source");
 
         // Robot Stream (StartFromLatest for real-time processing)
-        DataStream<String> geoInputStream = env.addSource(
-                new FlinkKafkaConsumer<>(Pattern.compile(config.inputTopicName), new SimpleStringSchema(), kafkaProperties)
+        DataStream<ConsumerRecord<byte[], byte[]>> geoInputStream = env.addSource(
+                new FlinkKafkaConsumer<>(Pattern.compile(config.inputTopicName),
+                        new KafkaDeserializationSchema<ConsumerRecord<byte[], byte[]>>() {
+
+                            @Override
+                            public boolean isEndOfStream(ConsumerRecord<byte[], byte[]> nextElement) {
+                                return false;
+                            }
+
+                            @Override
+                            public ConsumerRecord<byte[], byte[]> deserialize(ConsumerRecord<byte[], byte[]> record) {
+                                return record;
+                            }
+
+                            @Override
+                            public TypeInformation<ConsumerRecord<byte[], byte[]>> getProducedType() {
+                                return TypeInformation.of(new TypeHint<ConsumerRecord<byte[], byte[]>>() {});
+                            }
+                        }, kafkaProperties)
                         .setStartFromLatest()
         ).name("Robot-Source");
 
@@ -110,15 +133,19 @@ public class GeofencingStreamingJob implements Serializable {
         // ROBOT PIPELINE (Enrichment)
 
         DataStream<Point> spatialPointStream = geoInputStream
-                .map(new JsonToPointMapper(
+                .map(record -> {
+                    String key = record.key() != null ? new String(record.key()) : null;
+                    String value = new String(record.value());
+                    return new JsonToPointMapper(
                         uGrid,
-                        "/id",
-                        "/ts",
                         null,
-                        "/lat",
-                        "/lon",
-                        false
-                ))
+                        "/header/stamp/sec",
+                        "/header/stamp/nanosec",
+                        "/latitude",
+                        "/longitude",
+                        true
+                    ).map(key, value);
+                })
                 .filter(p -> p != null)
                 .name("JSON-Deserializer");
 
@@ -154,54 +181,54 @@ public class GeofencingStreamingJob implements Serializable {
                 .process(new ZoneGridJoinFunction(config.radius))
                 .name("Zone-Grid-Join");
 
-        DataStream<String> throttledAlerts = alerts
-                .keyBy(point -> point.objID)
-                .window(TumblingProcessingTimeWindows.of(Time.seconds(1))) // Okno 1s
-                .reduce(
-                (r1, r2) -> r2,new ProcessWindowFunction<AssignedPoint, String, String, TimeWindow>() {
-                    @Override
-                    public void process(String robotID, Context context, Iterable<AssignedPoint> elements, Collector<String> out) {
+        // DataStream<String> throttledAlerts = alerts
+        //         .keyBy(point -> point.objID)
+        //         .window(TumblingProcessingTimeWindows.of(Time.seconds(1))) // Okno 1s
+        //         .reduce(
+        //         (r1, r2) -> r2,new ProcessWindowFunction<AssignedPoint, String, String, TimeWindow>() {
+        //             @Override
+        //             public void process(String robotID, Context context, Iterable<AssignedPoint> elements, Collector<String> out) {
 
 
-                        long start = context.window().getStart();
-                        long end = context.window().getEnd();
+        //                 long start = context.window().getStart();
+        //                 long end = context.window().getEnd();
 
-                        String jsonMessage = String.format(
-                                "{\"type\":\"outside_zone\",\"window_start\":%d,\"window_end\":%d,\"object_id\":\"%s\"}",
-                                start, end, robotID
-                        );
+        //                 String jsonMessage = String.format(
+        //                         "{\"type\":\"outside_zone\",\"window_start\":%d,\"window_end\":%d,\"object_id\":\"%s\"}",
+        //                         start, end, robotID
+        //                 );
 
-                        out.collect(jsonMessage);
-                    }
-                })
-                .name("Alert-1s-Aggregator");
+        //                 out.collect(jsonMessage);
+        //             }
+        //         })
+        //         .name("Alert-1s-Aggregator");
 
         // SINK
 
-        throttledAlerts.addSink(createKafkaProducer(config.outputTopicName, kafkaProperties))
-                .name("Alert-Sink");
+        // throttledAlerts.addSink(createKafkaProducer(config.outputTopicName, kafkaProperties))
+        //         .name("Alert-Sink");
 
 //        // BENCHMARK SINK
-//        DataStream<String> jsonAlerts = alerts
-//                .map(ap -> {
-//                    String zonesStr = (ap.assignedZoneIDs != null && !ap.assignedZoneIDs.isEmpty())
-//                            ? String.join("|", ap.assignedZoneIDs)
-//                            : "NONE";
-//
-//                    return String.format(Locale.US,
-//                            "{\"type\":\"geofence\",\"robot\":\"%s\",\"ts\":%d,\"lat\":%s,\"lon\":%s,\"msg\":\"OUTSIDE\",\"zones\":\"%s\"}",
-//                            ap.objID,
-//                            ap.timeStampMillisec,
-//                            ap.point.getY(),
-//                            ap.point.getX(),
-//                            zonesStr
-//                    );
-//                })
-//                .returns(Types.STRING)
-//                .name("Full-JSON-Serializer");
-//
-//
-//        jsonAlerts.addSink(createKafkaProducer(config.outputTopicName, kafkaProperties));
+       DataStream<String> jsonAlerts = alerts
+               .map(ap -> {
+                   String zonesStr = (ap.assignedZoneIDs != null && !ap.assignedZoneIDs.isEmpty())
+                           ? String.join("|", ap.assignedZoneIDs)
+                           : "NONE";
+
+                   return String.format(Locale.US,
+                           "{\"type\":\"geofence\",\"robot\":\"%s\",\"ts\":%d,\"lat\":%s,\"lon\":%s,\"msg\":\"OUTSIDE\",\"zones\":\"%s\"}",
+                           ap.objID,
+                           ap.timeStampMillisec,
+                           ap.point.getY(),
+                           ap.point.getX(),
+                           zonesStr
+                   );
+               })
+               .returns(Types.STRING)
+               .name("Full-JSON-Serializer");
+
+
+       jsonAlerts.addSink(createKafkaProducer(config.outputTopicName, kafkaProperties)).name("Benchmark-Alert-Sink");
 
         env.execute("GeofencingStreamingJob");
     }
