@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     
     # geoflink
     FLINK_URL: str = "http://localhost:8082"
-    KAFKA_BROKER: str = "127.0.0.1:9092"
+    KAFKA_BROKER: str = "broker:29092"
     FLINK_JAR_NAME: str = "GeoFlinkProject-0.1"
     GEOFLINK_DB_NAME: str = "geoflink_registry.db"
     
