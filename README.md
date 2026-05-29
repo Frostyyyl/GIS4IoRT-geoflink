@@ -68,3 +68,11 @@ Register zones, robots, configs and rules. In the terminal:
 
 ### NOTE: Running benchmarks with the [ros2-robot-fleet-demo](https://github.com/LRMPUT/ros2-robot-fleet-demo) project
 Instead of starting the ecosystem according to [this section](#quick-start), simply follow the instructions stated in the geoflink README.md file of the project found on the geoflink branch. Then proceed with the tests as usual.
+
+## Analysis
+
+The generated output data can be aggregated. 
+
+1. In the `calculate_latency.py` file, set which metrics to compare.
+
+2. Run the script: `calculate_latency.py <path/to/data>`
