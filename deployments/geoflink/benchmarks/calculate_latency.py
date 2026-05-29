@@ -2,7 +2,7 @@ import json
 import sys
 import numpy as np
 
-FROM = "ts"
+FROM = "ts_0"
 TO = "ts_3"
 
 

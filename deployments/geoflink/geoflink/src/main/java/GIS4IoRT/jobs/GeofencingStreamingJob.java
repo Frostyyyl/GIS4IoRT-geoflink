@@ -216,7 +216,7 @@ public class GeofencingStreamingJob implements Serializable {
                            : "NONE";
 
                    return String.format(Locale.US,
-                           "{\"type\":\"geofence\",\"robot\":\"%s\",\"ts\":%d,\"lat\":%s,\"lon\":%s,\"msg\":\"OUTSIDE\",\"zones\":\"%s\"}",
+                           "{\"type\":\"geofence\",\"robot\":\"%s\",\"ts_0\":%d,\"lat\":%s,\"lon\":%s,\"msg\":\"OUTSIDE\",\"zones\":\"%s\"}",
                            ap.objID,
                            ap.timeStampMillisec,
                            ap.point.getY(),
