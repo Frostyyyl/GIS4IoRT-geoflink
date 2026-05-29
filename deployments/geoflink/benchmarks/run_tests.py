@@ -1,7 +1,6 @@
 """
 Runs GeoFlink architecture benchmarks.
 Benchmark query configuration lives in flink_manager.py.
-kafka_sensor_producer.py is used for telemetry logging and sensor signal generation.
 """
 
 import json
@@ -211,11 +210,9 @@ def run_tests():
 
             # Cleanup collector
             print("   [3/3] Finalizing test...")
-            cleanup()
 
         except subprocess.CalledProcessError as e:
             print(f"   [ERROR] Subprocess command error: {e}")
-            cleanup()
 
         finally:
             print(f"   [FLINK] Cleaning up Job after iteration {i}...")

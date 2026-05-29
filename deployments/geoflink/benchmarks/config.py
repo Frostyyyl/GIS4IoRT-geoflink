@@ -8,7 +8,7 @@ having to change the core logic of the benchmark scripts.
 
 # --- KAFKA CONFIGURATION ---
 
-KAFKA_BROKER = "broker:9092"
+KAFKA_BROKER = "localhost:9092"
 KAFKA_POLL_TIMEOUT_MS = 500
 KAFKA_CONSUMER_TIMEOUT_MS = 1000
 
