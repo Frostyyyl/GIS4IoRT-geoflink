@@ -63,6 +63,7 @@ class DataCollector(threading.Thread):
                 for tp, messages in msg_pack.items():
                     for msg in messages:
                         record = msg.value
+                        record['ts_2'] = msg.timestamp
                         record['ts_3'] = int(time.time() * 1000)
                         self.collected_data.append(record)
 
